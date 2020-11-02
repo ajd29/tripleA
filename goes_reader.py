@@ -10,8 +10,8 @@ Do not distribute the code within this package.
 Your own due diligence will be required to make sure the image processing
 and extracted chips are being performed as desired and over the location of interest.
 This code should provide a good start to creating image chips to train on.
-"""
 
+"""
 
 from netCDF4 import Dataset
 import matplotlib.pyplot as plt
@@ -21,6 +21,7 @@ from skimage import io
 import os
 import lat_lon_from_goes as llfg
 import pickle as pk
+import s3fs
 
 class ABI_Process(object):
     def __init__(self,center_lat,center_lon,buffer,save_directory=None,cmap=None,norm=None):
@@ -96,31 +97,37 @@ class ABI_Process(object):
         io.imsave(out_path,rgb)
 
 
-if __name__=="__main__":
+if __name__=="goes_reader":
 
-    center_lat = 28.3922   #approx lat of Cape Canaveral
-    center_lon = -80.6077  #appeox lon of Cape Canaveral
-    buffer = 200 #pixels - choose large enough area to capture evolving weather ; 200 ~= 400km x 400km area
+    center_lat = 28.3922   # approx lat of Cape Canaveral
+    center_lon = -80.6077  # approx lon of Cape Canaveral
+    buffer = 200 # pixels - choose large enough area to capture evolving weather ; 200 ~= 400km x 400km area
 
     # file_folder = '/home/ebw29954/VT_Capstone/FY21_Example_Process/Files'
-    file_folder = '/Users/allisondesantis/school/fall_2020/capstone/aerospace\
-    /scripts/FY21_Example_Process'
-    save_folder = '/Users/allisondesantis/school/fall_2020/capstone/aerospace\
-    /scripts/FY21_Example_Process'
+    # file_folder = '/SageMaker/tripleA/'
+    save_folder = 'sample_images'
+    
+    fs = s3fs.S3FileSystem(anon=True) # connect to s3 bucket!
+    path = 's3://noaa-goes16/ABI-L2-CMIPC/2017/*/*/*.nc'
+    files = fs.glob(path)
+   
+    for i in range(1):
+        
+        file = files[i] # getting first file 
+    
+        # Optional - the colormap files here map the brightness temperature to a commonly used colormap by NOAA
+        # You can totally skip this or save chips out however you want
+        colormap_path = ''
+        IR_TPC_R_CMAP_path = os.path.join(colormap_path,'LongwaveInfraredDeepConvection_CMAP.pk')
+        IR_TPC_R_NORM_path = os.path.join(colormap_path,'LongwaveInfraredDeepConvection_NORM.pk')
 
-    files = glob(os.path.join(file_folder,'*.nc'))
+        with open(IR_TPC_R_CMAP_path,'rb') as cmap_file, open(IR_TPC_R_NORM_path,'rb') as norm_file:
+            IR_TPC_R_CMAP = pk.load(cmap_file,fix_imports=True,encoding='latin1')
+            IR_TPC_R_NORM= pk.load(norm_file,fix_imports=True,encoding='latin1')
 
-    #Optional - the colormap files here map the brightness temperature to a commonly used colormap by NOAA
-    #You can totally skip this or save cihps out however you want
-    colormap_path = '/Users/allisondesantis/school/fall_2020/capstone/aerospace\
-    /scripts/FY21_Example_Process'
-    IR_TPC_R_CMAP_path = os.path.join(colormap_path,'LongwaveInfraredDeepConvection_CMAP.pk')
-    IR_TPC_R_NORM_path = os.path.join(colormap_path,'LongwaveInfraredDeepConvection_NORM.pk')
-    with open(IR_TPC_R_CMAP_path,'rb') as cmap_file, open(IR_TPC_R_NORM_path,'rb') as norm_file:
-        IR_TPC_R_CMAP = pk.load(cmap_file,fix_imports=True,encoding='latin1')
-        IR_TPC_R_NORM= pk.load(norm_file,fix_imports=True,encoding='latin1')
+        # Initialize  processing class
+        ABI_proc = ABI_Process(center_lat,center_lon,buffer,save_directory=save_folder,\
+                                   cmap=IR_TPC_R_CMAP,norm=IR_TPC_R_NORM)
 
-    #Initialize  processing class
-    ABI_proc = ABI_Process(center_lat,center_lon,buffer,save_directory=save_folder,cmap=IR_TPC_R_CMAP,norm=IR_TPC_R_NORM)
-    #Process a file
-    ABI_proc.channel_proc(files[0])
+        # Process a file
+        ABI_proc.channel_proc(file)
